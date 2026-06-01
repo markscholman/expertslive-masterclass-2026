@@ -63,12 +63,63 @@ $RoleAgcConfigManager   = 'fbc52c3f-28ad-4303-a892-8a056630b8f1'   # AppGw for C
 $RoleNetworkContributor = '4d97b98b-1d4f-4787-a291-c67834d212e7'
 
 # ---- Prereqs --------------------------------------------------------------
-foreach ($t in @(
-  @{n='az';      m='Install the Azure CLI.'},
-  @{n='kubectl'; m="Install kubectl (e.g. 'az aks install-cli')."},
-  @{n='helm';    m='Install Helm 3 (https://helm.sh/docs/intro/install/).'} )) {
-  if (-not (Get-Command $t.n -ErrorAction SilentlyContinue)) { Write-Error "'$($t.n)' not found. $($t.m)"; exit 1 }
+
+# Azure CLI
+if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+    Write-Error "Azure CLI not found. Install the Azure CLI first."
+    exit 1
 }
+
+# kubectl
+if (-not (Get-Command kubectl -ErrorAction SilentlyContinue)) {
+    Write-Error "kubectl not found. Install kubectl first (for example: 'az aks install-cli')."
+    exit 1
+}
+
+# Helm
+if (-not (Get-Command helm -ErrorAction SilentlyContinue)) {
+
+    Write-Host "Helm not found. Installing Helm via Winget..." -ForegroundColor Yellow
+
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        Write-Error "Winget is not available. Please install Helm manually."
+        exit 1
+    }
+
+    & winget install Helm.Helm `
+        --accept-package-agreements `
+        --accept-source-agreements `
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Helm installation failed."
+        exit 1
+    }
+
+    # Refresh PATH in the current PowerShell session
+    $env:PATH = (
+        [System.Environment]::GetEnvironmentVariable("PATH", "Machine") +
+        ";" +
+        [System.Environment]::GetEnvironmentVariable("PATH", "User")
+    )
+
+    # Verify installation
+    if (-not (Get-Command helm -ErrorAction SilentlyContinue)) {
+        Write-Warning "Helm was installed but is not yet available in the current session."
+        Write-Warning "Please restart PowerShell and run the script again."
+        exit 1
+    }
+
+    Write-Host "Helm successfully installed." -ForegroundColor Green
+}
+
+# Validate Azure login
+& az account show 2>$null | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Not logged in. Run: az login"
+    exit 1
+}
+
+Write-Host "Subscription: $(Invoke-AzOut account show --query name -o tsv)"
 & az account show 2>$null | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Error "Not logged in. Run: az login"; exit 1 }
 Write-Host "Subscription: $(Invoke-AzOut account show --query name -o tsv)"
